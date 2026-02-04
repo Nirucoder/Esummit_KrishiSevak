@@ -103,33 +103,39 @@ class UserDataService {
 
   // User Profile Management
   async saveUserProfile(profile: UserProfile): Promise<{ success: boolean; error?: string }> {
-    if (this.isDemoMode) {
-      // Demo mode: Just return success
+    // Import supabase client dynamically to avoid circular dependencies
+    const { supabase, isSupabaseConfigured } = await import('../lib/supabaseClient');
+
+    if (!isSupabaseConfigured() || !supabase) {
+      // Demo mode: Just log and return success
       console.log('Demo mode: Profile saved locally', profile);
       return { success: true };
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/user/save-data`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          userId: profile.userId,
-          type: 'profile',
-          data: profile,
-        }),
-      });
+      // Upsert profile data to Supabase profiles table
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: profile.userId,
+          name: profile.name,
+          phone: profile.phone,
+          farm_location: profile.farmLocation,
+          farm_size: profile.farmSize,
+          primary_crops: profile.primaryCrops,
+          farming_type: profile.farmingType,
+          language: profile.language,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
 
-      if (!response.ok) {
-        throw new Error(`Failed to save profile: ${response.statusText}`);
+      if (error) {
+        console.error('Error saving profile to Supabase:', error);
+        return { success: false, error: error.message };
       }
 
-      const result = await response.json();
-      return result;
-    } catch (error) {
+      console.log('Profile saved to Supabase:', profile.userId);
+      return { success: true };
+    } catch (error: any) {
       console.error('Error saving user profile:', error);
       return { success: false, error: error.message };
     }

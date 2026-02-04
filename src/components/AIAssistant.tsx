@@ -3,10 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { 
-  MessageCircle, 
-  Send, 
-  Mic, 
+import {
+  MessageCircle,
+  Send,
+  Mic,
   MicOff,
   Bot,
   User,
@@ -87,43 +87,93 @@ export function AIAssistant({ language, isOpen, onClose }: AIAssistantProps) {
 
   const t = content[language as keyof typeof content] || content.en;
 
-  // Mock AI responses
-  const getAIResponse = (userInput: string): string => {
+  // User location state
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+
+  // Get user's current location on mount
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lon: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.warn('Geolocation error:', error);
+          // Default to a location in India
+          setUserLocation({ lat: 28.6139, lon: 77.2090 });
+        }
+      );
+    }
+  }, []);
+
+  // Get AI response - powered by OpenAI with Agromonitoring context
+  const getAIResponse = async (userInput: string): Promise<string> => {
+    // Try OpenAI first
+    try {
+      const { openAIService } = await import('../services/OpenAIService');
+
+      if (openAIService.isConfigured()) {
+        // Fetch weather context from Agromonitoring
+        let weatherContext = undefined;
+        if (userLocation) {
+          try {
+            const { agroService } = await import('../services/AgroMonitoringService');
+            const weather = await agroService.getCurrentWeather(userLocation.lat, userLocation.lon);
+
+            if (weather) {
+              weatherContext = {
+                temperature: weather.main?.temp ? Math.round(weather.main.temp - 273.15) : undefined,
+                humidity: weather.main?.humidity,
+                description: weather.weather?.[0]?.description,
+                windSpeed: weather.wind?.speed ? Math.round(weather.wind.speed * 3.6) : undefined
+              };
+            }
+          } catch (e) {
+            console.warn('Could not fetch weather context:', e);
+          }
+        }
+
+        // Call OpenAI with context
+        const response = await openAIService.chat(
+          userInput,
+          language,
+          weatherContext,
+          userLocation ? { lat: userLocation.lat, lon: userLocation.lon } : undefined
+        );
+
+        return response;
+      }
+    } catch (error) {
+      console.error('OpenAI error, falling back to mock responses:', error);
+    }
+
+    // Fallback to mock responses if OpenAI fails or is not configured
     const input = userInput.toLowerCase();
-    
-    if (input.includes('fertilizer') || input.includes('उर्वरक')) {
-      return language === 'en' 
-        ? 'For wheat crops, I recommend using NPK fertilizer (20-10-10) at a rate of 120-150 kg per hectare. Apply nitrogen in 2-3 splits: 50% at sowing, 25% at tillering, and 25% at booting stage. Based on your soil test, you may also need to add micronutrients like zinc and iron.'
-        : 'गेहूं की फसल के लिए, मैं NPK उर्वरक (20-10-10) की सिफारिश करता हूं, 120-150 किग्रा प्रति हेक्टेयर की दर से। नाइट्रोजन को 2-3 भागों में दें: 50% बुवाई के समय, 25% कल्ले निकलते समय, और 25% बाली निकलते समय। आपके मिट्टी परीक्षण के आधार पर, आपको जिंक और आयरन जैसे सूक्ष्म पोषक तत्वों की भी आवश्यकता हो सकती है।';
-    }
-    
-    if (input.includes('rice') || input.includes('चावल')) {
-      return language === 'en'
-        ? 'The best time to plant rice depends on your region. For Kharif season, sow nursery in May-June and transplant in June-July. Ensure field is puddled well and maintain 2-3 cm water level. Use certified seeds and treat with fungicide before sowing.'
-        : 'चावल बोने का सबसे अच्छा समय आपके क्षेत्र पर निर्भर करता है। खरीफ सीजन के लिए, मई-जून में नर्सरी बोएं और जून-जुलाई में रोपाई करें। खेत को अच्छी तरह तैयार करें और 2-3 सेमी पानी का स्तर बनाए रखें। प्रमाणित बीज का उपयोग करें और बुवाई से पहले फफूंदनाशी से उपचार करें।';
-    }
-    
-    if (input.includes('aphid') || input.includes('एफिड')) {
-      return language === 'en'
-        ? 'For natural aphid control: 1) Spray neem oil solution (3-5ml per liter) in evening hours. 2) Introduce beneficial insects like ladybugs and lacewings. 3) Use yellow sticky traps. 4) Spray soapy water (mild detergent) solution. 5) Plant companion crops like marigold to repel aphids.'
-        : 'प्राकृतिक एफिड नियंत्रण के लिए: 1) शाम के समय नीम का तेल (3-5 मिली प्रति लीटर) का छिड़काव करें। 2) लेडीबग और लेसविंग जैसे लाभकारी कीड़े लाएं। 3) पीले चिपचिपे जाल का उपयोग करें। 4) साबुन का पानी (हल्का डिटर्जेंट) का छिड़काव करें। 5) एफिड को भगाने के लिए गेंदे जैसी सहयोगी फसलें लगाएं।';
-    }
-    
-    if (input.includes('scheme') || input.includes('योजना')) {
-      return language === 'en'
-        ? 'Key government schemes available: 1) PM-KISAN: ₹6,000 annual income support. 2) PM Fasal Bima Yojana: Crop insurance coverage. 3) Kisan Credit Card: Credit facility up to ₹3 lakhs. 4) PM-KUSUM: Solar pump subsidies. 5) Soil Health Card Scheme: Free soil testing. Check eligibility and apply through official portals.'
-        : 'उपलब्ध मुख्य सरकार�� योजनाएं: 1) PM-KISAN: ₹6,000 वार्षिक आय सहायता। 2) PM फसल बीमा योजना: फसल बीमा कवरेज। 3) किसान क्रेडिट कार्ड: ₹3 लाख तक क्रेडिट सुविधा। 4) PM-KUSUM: सोलर पंप सब्सिडी। 5) मिट्टी स्वास्थ्य कार्ड योजना: मुफ्त मिट्टी परीक्षण। पात्रता जांचें और आधिकारिक पोर्टल के माध्यम से आवेदन करें।';
-    }
-    
+
     if (input.includes('weather') || input.includes('मौसम')) {
       return language === 'en'
-        ? 'Based on current weather data: Temperature is 29°C with 65% humidity. Rainfall expected in next 48 hours (15-25mm). Moderate wind speed. Good conditions for most crops. Avoid spraying chemicals before expected rainfall. Ensure proper drainage in low-lying areas.'
-        : 'वर्तमान मौसम डेटा के आधार पर: तापमान 29°C है और 65% आर्द्रता है। अगले 48 घंटों में बारिश की उम्मीद (15-25 मिमी)। मध्यम हवा की गति। अधिकांश फसलों के लिए अच्छी स्थितियां। अपेक्षित बारिश से पहले रसायनों का छिड़काव न करें। निचले इलाकों में उचित जल निकासी सुनिश्चित करें।';
+        ? 'I couldn\'t fetch current weather data. Please ensure OpenAI API key is configured. For general advice: check local conditions before field operations, avoid spraying before expected rainfall.'
+        : 'मैं वर्तमान मौसम डेटा प्राप्त नहीं कर सका। कृपया सुनिश्चित करें कि OpenAI API key कॉन्फ़िगर है। सामान्य सलाह: खेत के कार्यों से पहले स्थानीय स्थितियों की जांच करें।';
     }
-    
+
+    if (input.includes('fertilizer') || input.includes('उर्वरक')) {
+      return language === 'en'
+        ? 'For wheat crops, I recommend using NPK fertilizer (20-10-10) at a rate of 120-150 kg per hectare. Apply nitrogen in 2-3 splits: 50% at sowing, 25% at tillering, and 25% at booting stage.'
+        : 'गेहूं की फसल के लिए, मैं NPK उर्वरक (20-10-10) की सिफारिश करता हूं, 120-150 किग्रा प्रति हेक्टेयर की दर से। नाइट्रोजन को 2-3 भागों में दें।';
+    }
+
+    if (input.includes('scheme') || input.includes('योजना')) {
+      return language === 'en'
+        ? 'Key government schemes: PM-KISAN (₹6,000/year), PM Fasal Bima Yojana (crop insurance), Kisan Credit Card (up to ₹3 lakhs), PM-KUSUM (solar subsidies), Soil Health Card (free testing).'
+        : 'मुख्य सरकारी योजनाएं: PM-KISAN (₹6,000/वर्ष), PM फसल बीमा योजना, किसान क्रेडिट कार्ड (₹3 लाख तक), PM-KUSUM (सोलर सब्सिडी), मिट्टी स्वास्थ्य कार्ड।';
+    }
+
     return language === 'en'
-      ? 'I understand your query about farming. For specific advice, please provide more details about your crop, field conditions, or the specific issue you\'re facing. I can help with crop management, pest control, fertilizer recommendations, weather advice, and government schemes.'
-      : 'मैं खेती के बारे में आपकी जिज्ञासा समझता हूं। विशिष्ट सलाह के लिए, कृपया अपनी फसल, खेत की स्थिति, या आपके सामने आने वाली विशिष्ट समस्या के बारे में अधिक विवरण दें। मैं फसल प्रबंधन, कीट नियंत्रण, उर्वरक सिफारिशों, मौसम सलाह, और सरकारी योजनाओं में मदद कर सकता हूं।';
+      ? 'I understand your query. For AI-powered responses, please ensure OpenAI API is configured. I can help with crop management, pest control, fertilizer recommendations, weather advice, and government schemes.'
+      : 'मैं आपकी जिज्ञासा समझता हूं। AI-संचालित प्रतिक्रियाओं के लिए, कृपया सुनिश्चित करें कि OpenAI API कॉन्फ़िगर है। मैं फसल प्रबंधन, कीट नियंत्रण, उर्वरक सिफारिशों में मदद कर सकता हूं।';
   };
 
   const scrollToBottom = () => {
@@ -157,21 +207,36 @@ export function AIAssistant({ language, isOpen, onClose }: AIAssistantProps) {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const userInput = input;
     setInput('');
     setIsLoading(true);
 
-    // Simulate AI processing delay
-    setTimeout(() => {
+    try {
+      // Get AI response (may involve async API calls)
+      const responseContent = await getAIResponse(userInput);
+
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
         type: 'bot',
-        content: getAIResponse(input),
+        content: responseContent,
         timestamp: new Date()
       };
 
       setMessages(prev => [...prev, botResponse]);
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'bot',
+        content: language === 'en'
+          ? 'Sorry, I encountered an error. Please try again.'
+          : 'क्षमा करें, एक त्रुटि हुई। कृपया पुनः प्रयास करें।',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorResponse]);
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -224,10 +289,10 @@ export function AIAssistant({ language, isOpen, onClose }: AIAssistantProps) {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = language === 'hi' ? 'hi-IN' : 'en-US';
       utterance.rate = 0.8;
-      
+
       utterance.onstart = () => setIsSpeaking(true);
       utterance.onend = () => setIsSpeaking(false);
-      
+
       speechSynthesis.speak(utterance);
     } else {
       alert(t.speakNotSupported);
@@ -249,7 +314,7 @@ export function AIAssistant({ language, isOpen, onClose }: AIAssistantProps) {
       className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
       onClick={onClose}
     >
-      <Card 
+      <Card
         className="w-full max-w-2xl h-[600px] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
@@ -283,22 +348,20 @@ export function AIAssistant({ language, isOpen, onClose }: AIAssistantProps) {
                   className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div className={`flex items-start gap-2 max-w-[80%] ${message.type === 'user' ? 'flex-row-reverse' : ''}`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      message.type === 'user' 
-                        ? 'bg-blue-500' 
-                        : 'bg-gradient-to-br from-green-400 to-green-600'
-                    }`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${message.type === 'user'
+                      ? 'bg-blue-500'
+                      : 'bg-gradient-to-br from-green-400 to-green-600'
+                      }`}>
                       {message.type === 'user' ? (
                         <User className="h-4 w-4 text-white" />
                       ) : (
                         <Bot className="h-4 w-4 text-white" />
                       )}
                     </div>
-                    <div className={`p-3 rounded-lg ${
-                      message.type === 'user'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-muted'
-                    }`}>
+                    <div className={`p-3 rounded-lg ${message.type === 'user'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-muted'
+                      }`}>
                       <p className="text-sm">{message.content}</p>
                       <div className="flex items-center justify-between mt-2">
                         <span className="text-xs opacity-70">

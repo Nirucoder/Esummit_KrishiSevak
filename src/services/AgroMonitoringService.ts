@@ -1,7 +1,7 @@
 // Service for interacting with Agromonitoring API (OpenWeather)
 // Docs: https://agromonitoring.com/api
 
-const API_KEY = '65e1f692ce3253d6f9af823637bf7f93';
+const API_KEY = import.meta.env.VITE_AGROMONITORING_API_KEY || '';
 const BASE_URL = 'https://api.agromonitoring.com/agro/1.0';
 
 export interface AgroPolygon {
