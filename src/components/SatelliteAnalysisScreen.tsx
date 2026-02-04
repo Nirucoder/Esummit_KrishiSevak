@@ -5,11 +5,11 @@ import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ExcelExport, createSatelliteData } from './ExcelExport';
-import { 
-  Satellite, 
-  Eye, 
-  Layers, 
-  Download, 
+import {
+  Satellite,
+  Eye,
+  Layers,
+  Download,
   RefreshCw,
   TrendingUp,
   Droplets,
@@ -25,6 +25,7 @@ import { ImageWithFallback } from './figma/ImageWithFallback';
 import { geeService, NDVIAnalysis, SatelliteImagery } from '../services/GoogleEarthEngineService';
 import { mlModelService } from '../services/MLModelService';
 import { dataIntegrationService } from '../services/DataIntegrationService';
+import { agroService } from '../services/AgroMonitoringService';
 
 interface SatelliteAnalysisScreenProps {
   language: string;
@@ -156,48 +157,108 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
       const field = fieldData.find(f => f.id === selectedField);
       if (!field) return;
 
-      // Get NDVI analysis from Google Earth Engine
-      const endDate = new Date().toISOString().split('T')[0];
-      const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      
-      const [ndviResult, satelliteResult, soilMoisture] = await Promise.all([
-        geeService.calculateNDVI(field.location, 1000, startDate, endDate),
-        geeService.getSatelliteImagery(field.location, startDate, endDate),
-        geeService.analyzeSoilMoisture(field.location, 1000, endDate)
-      ]);
+      // Create polygon for field location (small square around point)
+      const lat = field.location.lat;
+      const lng = field.location.lng;
+      const delta = 0.001;
+      const coordinates = [
+        [lng - delta, lat - delta],
+        [lng + delta, lat - delta],
+        [lng + delta, lat + delta],
+        [lng - delta, lat + delta],
+        [lng - delta, lat - delta]
+      ];
 
-      setNdviAnalysis(ndviResult);
-      setSatelliteImages(satelliteResult);
+      // 1. Create Polygon in Agromonitoring
+      const polygon = await agroService.createPolygon(field.name, coordinates);
+      console.log('Created Polygon:', polygon);
 
-      // Generate historical NDVI data
-      const historicalNdvi = [];
-      const baseNDVI = ndviResult?.averageNDVI || field.ndvi || 0.7;
-      for (let i = 30; i >= 0; i -= 5) {
-        const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-        historicalNdvi.push({
-          date: date.toISOString().split('T')[0],
-          value: baseNDVI + (Math.random() - 0.5) * 0.2,
-          field: field.name
-        });
+      // 2. Get Weather
+      const weather = await agroService.getCurrentWeather(lat, lng);
+      console.log('✅ Real Weather Data:', weather);
+
+      // 3. Get Satellite Images & NDVI
+      const endDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // Yesterday to avoid "future date" error
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+
+      const images = await agroService.getSatelliteImages(polygon.id, startDate, endDate);
+      console.log('✅ Satellite Images Found:', images?.length);
+
+      const ndviStats = await agroService.getNDVIStats(polygon.id, startDate, endDate);
+      console.log('✅ NDVI Historical Stats:', ndviStats);
+
+      // Process real NDVI data
+      let processedNDVI: NDVIAnalysis | null = null;
+      if (ndviStats && ndviStats.length > 0) {
+        // Find most recent valid scan
+        const latestStat = ndviStats[ndviStats.length - 1];
+        processedNDVI = {
+          averageNDVI: latestStat.data.mean,
+          maxNDVI: latestStat.data.max,
+          minNDVI: latestStat.data.min,
+          vegetationHealth: latestStat.data.mean > 0.6 ? 'Excellent' : latestStat.data.mean > 0.4 ? 'Good' : 'Poor',
+          healthPercentage: Math.round(latestStat.data.mean * 100),
+          trendAnalysis: {
+            trend: 'Stable',
+            changeRate: 0
+          },
+          hotspots: []
+        };
       }
-      setNdviData(historicalNdvi);
 
-      // Generate moisture data
+      // Convert images to our format
+      const processedImages: SatelliteImagery[] = images.map((img: any) => ({
+        imageUrl: img.image?.truecolor || img.tile?.truecolor, // Use tile URL if direct image unavailable
+        date: new Date(img.dt * 1000).toISOString(),
+        cloudCover: img.cl,
+        resolution: 10,
+        bands: ['True Color']
+      }));
+
+      // Update State with REAL data
+      if (processedNDVI) setNdviAnalysis(processedNDVI);
+      if (processedImages.length > 0) setSatelliteImages(processedImages);
+
+      // Update charts with real history if available
+      if (ndviStats.length > 0) {
+        const history = ndviStats.map((stat: any) => ({
+          date: new Date(stat.dt * 1000).toISOString().split('T')[0],
+          value: stat.data.mean,
+          field: field.name
+        }));
+        setNdviData(history);
+      } else {
+        // Fallback generation if no satellite history found
+        const historicalNdvi = [];
+        const baseNDVI = field.ndvi || 0.7;
+        for (let i = 30; i >= 0; i -= 5) {
+          const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+          historicalNdvi.push({
+            date: date.toISOString().split('T')[0],
+            value: baseNDVI + (Math.random() - 0.5) * 0.2,
+            field: field.name
+          });
+        }
+        setNdviData(historicalNdvi);
+      }
+
+      // Generate moisture data (still simulated as API doesn't give free soil moisture history easily)
       const moistureHistory = [];
-      const baseMoisture = soilMoisture?.averageMoisture || 40;
+      const baseMoisture = 40;
       for (let i = 14; i >= 0; i -= 2) {
         const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
         moistureHistory.push({
           date: date.toISOString().split('T')[0],
           moisture: baseMoisture + (Math.random() - 0.5) * 10,
-          temperature: 25 + Math.random() * 10
+          temperature: weather ? (weather.main.temp - 2 + Math.random() * 4) : (25 + Math.random() * 10)
         });
       }
       setMoistureData(moistureHistory);
 
-      // Get ML insights for crop health
+      // Get ML insights 
       const cropHealthPrediction = await mlModelService.predictCropHealth(
-        [], // No images for now - would be actual crop images
+        [],
         field.crop.split(' / ')[0],
         field.location
       );
@@ -206,8 +267,8 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
     } catch (error) {
       console.error('Error loading field data:', error);
       const field = fieldData.find(f => f.id === selectedField);
-      
-      // Fallback to mock data
+
+      // Fallback to mock data if API fails (graceful degradation)
       setNdviAnalysis({
         averageNDVI: field?.ndvi || 0.75,
         maxNDVI: (field?.ndvi || 0.75) + 0.1,
@@ -220,7 +281,7 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
         },
         hotspots: []
       });
-      
+
       setNdviData([
         { date: '2024-01-15', value: 0.45, field: field?.name || 'Field A' },
         { date: '2024-02-01', value: 0.52, field: field?.name || 'Field A' },
@@ -291,7 +352,7 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
   return (
     <div className="space-y-6">
       {/* Header */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -310,7 +371,7 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             {t.refreshData}
           </Button>
-          <Button 
+          <Button
             variant="outline"
             onClick={() => {
               // Export comprehensive satellite and ML data to Excel
@@ -370,7 +431,7 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
                 if (geeExportData.length > 0) {
                   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(geeExportData), 'GEE Analysis');
                 }
-                
+
                 XLSX.writeFile(wb, `krishisevak-satellite-analysis-${new Date().toISOString().split('T')[0]}.xlsx`);
               });
             }}
@@ -436,8 +497,8 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
                     {t.fieldView}
                   </CardTitle>
                   <CardDescription>
-                    {selectedLayer === 'ndvi' ? t.ndviLayer : 
-                     selectedLayer === 'moisture' ? t.moistureLayer : t.temperatureLayer}
+                    {selectedLayer === 'ndvi' ? t.ndviLayer :
+                      selectedLayer === 'moisture' ? t.moistureLayer : t.temperatureLayer}
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
@@ -574,13 +635,13 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
                       </Badge>
                     </div>
                     <p className="text-xs text-purple-700">
-                      {language === 'en' 
-                        ? `ML analysis shows ${mlInsights.healthScore}% crop health score` 
+                      {language === 'en'
+                        ? `ML analysis shows ${mlInsights.healthScore}% crop health score`
                         : `ML विश्लेषण ${mlInsights.healthScore}% फसल स्वास्थ्य स्कोर दिखाता है`
                       }
                     </p>
                   </div>
-                  
+
                   {mlInsights.diseases && mlInsights.diseases.length > 0 && (
                     <div className="p-3 bg-red-50 rounded-lg border border-red-200">
                       <div className="flex items-center gap-2 mb-2">
@@ -640,17 +701,17 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
                       </Badge>
                     </div>
                     <p className="text-xs text-blue-700">
-                      {language === 'en' 
-                        ? `Average NDVI: ${(ndviAnalysis.averageNDVI || 0).toFixed(2)} (${ndviAnalysis.healthPercentage || 0}%)` 
+                      {language === 'en'
+                        ? `Average NDVI: ${(ndviAnalysis.averageNDVI || 0).toFixed(2)} (${ndviAnalysis.healthPercentage || 0}%)`
                         : `औसत NDVI: ${(ndviAnalysis.averageNDVI || 0).toFixed(2)} (${ndviAnalysis.healthPercentage || 0}%)`
                       }
                     </p>
                   </div>
-                  
+
                   <div className="p-3 bg-green-50 rounded-lg border border-green-200">
                     <p className="text-sm text-green-800">
-                      {language === 'en' 
-                        ? `Trend: ${ndviAnalysis.trendAnalysis?.trend || 'Unknown'} (${(ndviAnalysis.trendAnalysis?.changeRate || 0) > 0 ? '+' : ''}${((ndviAnalysis.trendAnalysis?.changeRate || 0) * 100).toFixed(1)}%)` 
+                      {language === 'en'
+                        ? `Trend: ${ndviAnalysis.trendAnalysis?.trend || 'Unknown'} (${(ndviAnalysis.trendAnalysis?.changeRate || 0) > 0 ? '+' : ''}${((ndviAnalysis.trendAnalysis?.changeRate || 0) * 100).toFixed(1)}%)`
                         : `रुझान: ${ndviAnalysis.trendAnalysis?.trend || 'अज्ञात'} (${(ndviAnalysis.trendAnalysis?.changeRate || 0) > 0 ? '+' : ''}${((ndviAnalysis.trendAnalysis?.changeRate || 0) * 100).toFixed(1)}%)`
                       }
                     </p>
@@ -659,8 +720,8 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
                   {ndviAnalysis.hotspots && ndviAnalysis.hotspots.length > 0 && (
                     <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
                       <p className="text-sm text-yellow-800">
-                        {language === 'en' 
-                          ? `Alert: ${ndviAnalysis.hotspots[0].concern}` 
+                        {language === 'en'
+                          ? `Alert: ${ndviAnalysis.hotspots[0].concern}`
                           : `चेतावनी: ${ndviAnalysis.hotspots[0].concern}`
                         }
                       </p>
@@ -688,16 +749,15 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
               </CardHeader>
               <CardContent className="space-y-3">
                 {realtimeAlerts.map((alert, index) => (
-                  <div key={alert.id} className={`p-3 rounded-lg border ${
-                    alert.severity === 'High' ? 'bg-red-50 border-red-200' :
+                  <div key={alert.id} className={`p-3 rounded-lg border ${alert.severity === 'High' ? 'bg-red-50 border-red-200' :
                     alert.severity === 'Medium' ? 'bg-yellow-50 border-yellow-200' :
-                    'bg-blue-50 border-blue-200'
-                  }`}>
+                      'bg-blue-50 border-blue-200'
+                    }`}>
                     <div className="flex items-center justify-between mb-2">
                       <Badge variant="outline" className={
                         alert.severity === 'High' ? 'text-red-700' :
-                        alert.severity === 'Medium' ? 'text-yellow-700' :
-                        'text-blue-700'
+                          alert.severity === 'Medium' ? 'text-yellow-700' :
+                            'text-blue-700'
                       }>
                         {alert.type}
                       </Badge>
@@ -705,11 +765,10 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
                         {new Date(alert.timestamp).toLocaleTimeString()}
                       </span>
                     </div>
-                    <p className={`text-sm ${
-                      alert.severity === 'High' ? 'text-red-800' :
+                    <p className={`text-sm ${alert.severity === 'High' ? 'text-red-800' :
                       alert.severity === 'Medium' ? 'text-yellow-800' :
-                      'text-blue-800'
-                    }`}>
+                        'text-blue-800'
+                      }`}>
                       {alert.message}
                     </p>
                   </div>
@@ -732,14 +791,14 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
             <TabsTrigger value="moisture">{t.soilMoisture}</TabsTrigger>
             <TabsTrigger value="weather">{t.weatherOverlay}</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="ndvi">
             <Card>
               <CardHeader>
                 <CardTitle>{t.ndviAnalysis}</CardTitle>
                 <CardDescription>
-                  {language === 'en' 
-                    ? 'Vegetation health trends over time' 
+                  {language === 'en'
+                    ? 'Vegetation health trends over time'
                     : 'समय के साथ वनस्पति स्वास्थ्य के रुझान'
                   }
                 </CardDescription>
@@ -749,16 +808,16 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={ndviData}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        dataKey="date" 
+                      <XAxis
+                        dataKey="date"
                         tickFormatter={(value) => new Date(value).toLocaleDateString()}
                       />
                       <YAxis domain={[0, 1]} />
-                      <Area 
-                        type="monotone" 
-                        dataKey="value" 
-                        stroke="#16a34a" 
-                        fill="#16a34a" 
+                      <Area
+                        type="monotone"
+                        dataKey="value"
+                        stroke="#16a34a"
+                        fill="#16a34a"
                         fillOpacity={0.2}
                         strokeWidth={2}
                       />
@@ -768,14 +827,14 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
               </CardContent>
             </Card>
           </TabsContent>
-          
+
           <TabsContent value="moisture">
             <Card>
               <CardHeader>
                 <CardTitle>{t.soilMoisture}</CardTitle>
                 <CardDescription>
-                  {language === 'en' 
-                    ? 'Soil moisture and temperature correlation' 
+                  {language === 'en'
+                    ? 'Soil moisture and temperature correlation'
                     : 'मिट्टी की नमी और तापमान सहसंबंध'
                   }
                 </CardDescription>
@@ -785,22 +844,22 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={moistureData}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        dataKey="date" 
+                      <XAxis
+                        dataKey="date"
                         tickFormatter={(value) => new Date(value).toLocaleDateString()}
                       />
                       <YAxis />
-                      <Line 
-                        type="monotone" 
-                        dataKey="moisture" 
-                        stroke="#3b82f6" 
+                      <Line
+                        type="monotone"
+                        dataKey="moisture"
+                        stroke="#3b82f6"
                         strokeWidth={2}
                         name="Moisture %"
                       />
-                      <Line 
-                        type="monotone" 
-                        dataKey="temperature" 
-                        stroke="#f97316" 
+                      <Line
+                        type="monotone"
+                        dataKey="temperature"
+                        stroke="#f97316"
                         strokeWidth={2}
                         name="Temperature °C"
                       />
@@ -810,7 +869,7 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
               </CardContent>
             </Card>
           </TabsContent>
-          
+
           <TabsContent value="weather">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>
@@ -834,7 +893,7 @@ export function SatelliteAnalysisScreen({ language }: SatelliteAnalysisScreenPro
                   </div>
                 </CardContent>
               </Card>
-              
+
               <Card>
                 <CardHeader>
                   <CardTitle>{language === 'en' ? 'Precipitation Forecast' : 'वर्षा पूर्वानुमान'}</CardTitle>
