@@ -7,6 +7,9 @@ import { createClient } from '@supabase/supabase-js';
 let supabase: any = null;
 let supabaseConnected = false;
 
+const STORAGE_KEY_USER = 'krishi_auth_user';
+const STORAGE_KEY_TOKEN = 'krishi_auth_token';
+
 try {
   // Simple fallback initialization
   supabase = null; // Temporarily disable Supabase to ensure demo mode
@@ -48,6 +51,42 @@ class AuthService {
   private currentUser: AuthUser | null = null;
   private accessToken: string | null = null;
   private isDemoMode = !supabaseConnected; // Enable demo mode if Supabase is not connected
+
+  constructor() {
+    this.loadFromStorage();
+  }
+
+  private loadFromStorage() {
+    if (typeof window !== 'undefined') {
+      const storedUser = localStorage.getItem(STORAGE_KEY_USER);
+      const storedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
+
+      if (storedUser && storedToken) {
+        try {
+          this.currentUser = JSON.parse(storedUser);
+          this.accessToken = storedToken;
+        } catch (e) {
+          console.error('Failed to parse stored user', e);
+          localStorage.removeItem(STORAGE_KEY_USER);
+          localStorage.removeItem(STORAGE_KEY_TOKEN);
+        }
+      }
+    }
+  }
+
+  private saveToStorage(user: AuthUser, token: string) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+      localStorage.setItem(STORAGE_KEY_TOKEN, token);
+    }
+  }
+
+  private clearStorage() {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY_USER);
+      localStorage.removeItem(STORAGE_KEY_TOKEN);
+    }
+  }
 
   // Demo users for testing
   private demoUsers = [
@@ -93,6 +132,7 @@ class AuthService {
       this.currentUser = newUser;
       this.accessToken = 'demo-token-' + Date.now();
 
+      this.saveToStorage(this.currentUser, this.accessToken);
       this.notifyListeners(); // Notify listeners of state change
 
       return {
@@ -153,6 +193,7 @@ class AuthService {
         this.currentUser = authUser;
         this.accessToken = 'demo-token-' + Date.now();
 
+        this.saveToStorage(this.currentUser, this.accessToken);
         this.notifyListeners();
 
         return {
@@ -177,6 +218,7 @@ class AuthService {
         this.currentUser = dynamicUser;
         this.accessToken = 'demo-token-' + Date.now();
 
+        this.saveToStorage(this.currentUser, this.accessToken);
         this.notifyListeners();
 
         return {
@@ -276,6 +318,7 @@ class AuthService {
       // Demo mode: Just clear the current user
       this.currentUser = null;
       this.accessToken = null;
+      this.clearStorage();
       this.notifyListeners();
       return { success: true };
     }
@@ -315,6 +358,17 @@ class AuthService {
           accessToken: this.accessToken
         };
       }
+
+      // Try to reload from storage if in memory state is empty
+      this.loadFromStorage();
+      if (this.currentUser && this.accessToken) {
+        return {
+          success: true,
+          user: this.currentUser,
+          accessToken: this.accessToken
+        };
+      }
+
       return { success: false, error: 'No active session' };
     }
 

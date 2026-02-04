@@ -8,20 +8,13 @@ import {
   Volume2,
   VolumeX,
   PlayCircle,
-  PauseCircle,
   Settings,
   Languages,
-  X
+  X,
+  RefreshCw,
+  Server
 } from 'lucide-react';
 import { motion } from 'motion/react';
-
-// Extend the Window interface for TypeScript
-declare global {
-  interface Window {
-    webkitSpeechRecognition: any;
-    SpeechRecognition: any;
-  }
-}
 
 interface VoiceSupportProps {
   language: string;
@@ -33,17 +26,55 @@ interface VoiceSupportProps {
 export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: VoiceSupportProps) {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isSupported, setIsSupported] = useState(false);
+  const [isServerConnected, setIsServerConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [speechRate, setSpeechRate] = useState(1);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const [inputText, setInputText] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const SERVER_URL = 'http://localhost:5000';
+
+  useEffect(() => {
+    checkServerConnection();
+  }, []);
+
+  const checkServerConnection = async () => {
+    setIsConnecting(true);
+    try {
+      const response = await fetch(`${SERVER_URL}/status`);
+      const data = await response.json();
+      if (data.status === 'online') {
+        setIsServerConnected(true);
+        setErrorMessage('');
+      } else {
+        setIsServerConnected(false);
+        setErrorMessage('Voice server returned invalid status');
+      }
+    } catch (error) {
+      setIsServerConnected(false);
+      setErrorMessage('Plugin disconnected. Run backend/voice_server.py');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleManualSubmit = () => {
+    if (!inputText.trim()) return;
+    setTranscript(inputText);
+    if (onVoiceCommand) {
+      onVoiceCommand(inputText);
+    }
+    processVoiceCommand(inputText);
+    setInputText('');
+  };
 
   const content = {
     en: {
-      title: 'Voice Assistant',
+      title: 'Voice Assistant (Python)',
       listening: 'Listening...',
-      notListening: 'Click to start listening',
+      notListening: 'Ready',
       speaking: 'Speaking...',
       voiceCommands: 'Voice Commands',
       sampleCommands: [
@@ -57,13 +88,14 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
       stopListening: 'Stop Listening',
       enableVoice: 'Enable Voice Output',
       disableVoice: 'Disable Voice Output',
-      notSupported: 'Voice features not supported in this browser',
-      lastCommand: 'Last Command'
+      notSupported: 'Backend disconnected',
+      lastCommand: 'Last Command',
+      retryConnection: 'Retry Connection'
     },
     hi: {
-      title: 'आवाज सहायक',
+      title: 'आवाज सहायक (Python)',
       listening: 'सुन रहा है...',
-      notListening: 'सुनना शुरू करने के लिए क्लिक करें',
+      notListening: 'तैयार',
       speaking: 'बोल रहा है...',
       voiceCommands: 'आवाज कमांड',
       sampleCommands: [
@@ -77,69 +109,13 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
       stopListening: 'सुनना बंद करें',
       enableVoice: 'आवाज आउटपुट सक्षम करें',
       disableVoice: 'आवाज आउटपुट अक्षम करें',
-      notSupported: 'इस ब्राउज़र में आवाज सुविधाएं समर्थित नहीं हैं',
-      lastCommand: 'अंतिम कमांड'
+      notSupported: 'बैकएंड डिस्कनेक्ट हो गया',
+      lastCommand: 'अंतिम कमांड',
+      retryConnection: 'कनेक्शन पुनः प्रयास करें'
     }
   };
 
   const t = content[language as keyof typeof content] || content.en;
-
-  useEffect(() => {
-    // Check if Speech Recognition is supported
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      console.log('🎤 Speech Recognition found in browser');
-      setIsSupported(true);
-      const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
-
-      try {
-        const recognition = new SpeechRecognition();
-        recognitionRef.current = recognition;
-
-        recognition.continuous = false; // Stop after one command usually better for web apps
-        recognition.interimResults = false;
-        recognition.lang = language === 'hi' ? 'hi-IN' : 'en-US';
-
-        recognition.onstart = () => {
-          console.log('🎤 Recognition started');
-          setIsListening(true);
-        };
-
-        recognition.onresult = (event: any) => {
-          const result = event.results[0][0].transcript;
-          console.log('🎤 Result received:', result);
-          setTranscript(result);
-          if (onVoiceCommand) {
-            onVoiceCommand(result);
-          }
-          processVoiceCommand(result);
-        };
-
-        recognition.onend = () => {
-          console.log('🎤 Recognition ended');
-          setIsListening(false);
-        };
-
-        recognition.onerror = (event: any) => {
-          console.error('🎤 Speech recognition error:', event.error);
-          if (event.error === 'not-allowed') {
-            alert('Microphone access denied. Please allow microphone permissions in your browser settings.');
-          }
-          setIsListening(false);
-        };
-      } catch (e) {
-        console.error('🎤 Failed to initialize recognition:', e);
-      }
-    } else {
-      console.log('🎤 Speech Recognition NOT supported');
-      setIsSupported(false);
-    }
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    };
-  }, [language]);
 
   const processVoiceCommand = (command: string) => {
     const lowerCommand = command.toLowerCase();
@@ -160,120 +136,86 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
     }
   };
 
-  useEffect(() => {
-    // Load voices when they are ready
-    const loadVoices = () => {
-      window.speechSynthesis.getVoices();
-    };
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-    loadVoices();
-  }, []);
-
-  const speak = (text: string) => {
-    if (!voiceEnabled || !('speechSynthesis' in window)) return;
-
-    // Cancel any current speaking
-    speechSynthesis.cancel();
+  const speak = async (text: string) => {
+    if (!voiceEnabled || !isServerConnected) return;
 
     setIsSpeaking(true);
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = language === 'hi' ? 'hi-IN' : 'en-US';
-    utterance.rate = speechRate;
-
-    // Attempt to find a better voice
-    const voices = window.speechSynthesis.getVoices();
-    let selectedVoice = null;
-
-    if (language === 'hi') {
-      selectedVoice = voices.find(v => v.lang.includes('hi') || v.name.includes('Hindi'));
-    }
-
-    if (!selectedVoice) {
-      // Fallback or English preference
-      selectedVoice = voices.find(v => v.lang.startsWith(language === 'hi' ? 'hi' : 'en'));
-    }
-
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-    }
-
-    utterance.onend = () => {
-      setIsSpeaking(false);
-    };
-
-    utterance.onerror = (e) => {
-      console.error("Speech synthesis error", e);
-      setIsSpeaking(false);
-    }
-
-    speechSynthesis.speak(utterance);
-  };
-
-  const startListening = () => {
-    if (recognitionRef.current && isSupported) {
-      setIsListening(true);
-      recognitionRef.current.start();
+    try {
+      await fetch(`${SERVER_URL}/speak`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+    } catch (error) {
+      console.error("Speech synthesis error", error);
+    } finally {
+      // Create a fake timeout to reset speaking state since status sync is complex
+      setTimeout(() => setIsSpeaking(false), 3000);
     }
   };
 
-  const stopListening = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
+  const startListening = async () => {
+    if (!isServerConnected) {
+      checkServerConnection();
+      return;
+    }
+
+    setIsListening(true);
+    setErrorMessage('');
+
+    try {
+      const response = await fetch(`${SERVER_URL}/listen`, {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.text) {
+        setTranscript(data.text);
+        if (onVoiceCommand) {
+          onVoiceCommand(data.text);
+        }
+        processVoiceCommand(data.text);
+      } else if (!data.success) {
+        if (data.error.includes('timeout')) {
+          setErrorMessage('Listening timed out.');
+        } else {
+          setErrorMessage(data.error || 'Failed to understand');
+        }
+      }
+    } catch (error) {
+      console.error('Listening error:', error);
+      setErrorMessage('Connection to voice server lost');
+      setIsServerConnected(false);
+    } finally {
       setIsListening(false);
     }
   };
 
-  const toggleVoice = () => {
-    setVoiceEnabled(!voiceEnabled);
-    if (isSpeaking) {
-      speechSynthesis.cancel();
-      setIsSpeaking(false);
-    }
+  const stopListening = () => {
+    // Current server implementation waits for timeout, 
+    // real cancellation would require a separate endpoint
+    setIsListening(false);
   };
 
-  if (!isSupported) {
-    return (
-      <div className="fixed bottom-4 right-4 z-50">
-        <Card className="w-80">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MicOff className="h-5 w-5 text-gray-400" />
-                {t.title}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onToggle}
-                className="h-8 w-8 p-0"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-8 text-muted-foreground">
-              <MicOff className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>{t.notSupported}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const toggleVoice = () => {
+    setVoiceEnabled(!voiceEnabled);
+  };
+
+  if (!isEnabled) return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-50">
-      <Card className="w-80">
-        <CardHeader>
+      <Card className="w-80 shadow-xl border-t-4 border-t-green-600">
+        <CardHeader className="pb-3">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Mic className="h-5 w-5 text-green-500" />
+              <Mic className={`h-5 w-5 ${isServerConnected ? 'text-green-500' : 'text-gray-400'}`} />
               {t.title}
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={isListening ? "default" : "outline"}>
-                {isListening ? t.listening : t.notListening}
+              <Badge variant={isServerConnected ? (isListening ? "default" : "outline") : "destructive"}>
+                {isServerConnected ? (isListening ? t.listening : t.notListening) : 'Offline'}
               </Badge>
               <Button
                 variant="ghost"
@@ -287,17 +229,45 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+
+          {/* Connection Status */}
+          {!isServerConnected && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-red-700 font-medium">
+                <Server className="h-4 w-4" />
+                <span>Backend Disconnected</span>
+              </div>
+              <p className="text-xs text-red-600">
+                Please run the Python voice server:
+              </p>
+              <code className="bg-black/10 p-1 rounded text-xs block mb-1">
+                python backend/voice_server.py
+              </code>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={checkServerConnection}
+                disabled={isConnecting}
+                className="w-full gap-2 border-red-300 text-red-700 hover:bg-red-100"
+              >
+                {isConnecting ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                {t.retryConnection}
+              </Button>
+            </div>
+          )}
+
           {/* Voice Controls */}
           <div className="flex flex-wrap gap-3">
             <Button
               variant={isListening ? "destructive" : "default"}
               onClick={isListening ? stopListening : startListening}
               className="flex-1 min-w-[120px]"
+              disabled={!isServerConnected || isListening}
             >
               {isListening ? (
                 <>
-                  <MicOff className="h-4 w-4 mr-2" />
-                  {t.stopListening}
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
                 </>
               ) : (
                 <>
@@ -326,32 +296,28 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
             </Button>
           </div>
 
-          {/* Voice Animation */}
-          {isListening && (
-            <motion.div
-              className="flex justify-center"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <div className="flex items-center space-x-1">
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <motion.div
-                    key={i}
-                    className="w-1 bg-green-500 rounded-full"
-                    animate={{
-                      height: [10, 30, 10],
-                    }}
-                    transition={{
-                      duration: 0.8,
-                      repeat: Infinity,
-                      delay: i * 0.1,
-                    }}
-                  />
-                ))}
-              </div>
-            </motion.div>
+          {/* Error Message */}
+          {errorMessage && (
+            <div className="text-xs text-red-500 bg-red-50 p-2 rounded border border-red-200">
+              {errorMessage}
+            </div>
           )}
+
+          {/* Text Input Fallback */}
+          <div className="flex gap-2">
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
+              placeholder={language === 'hi' ? "कमांड टाइप करें..." : "Type a command..."}
+              className="flex-1 text-sm border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+            <Button size="sm" onClick={handleManualSubmit} disabled={!inputText.trim()}>
+              <PlayCircle className="h-4 w-4" />
+            </Button>
+          </div>
 
           {/* Last Command */}
           {transcript && (
@@ -381,7 +347,11 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
                 <div
                   key={index}
                   className="p-2 bg-muted/50 rounded text-sm cursor-pointer hover:bg-muted transition-colors"
-                  onClick={() => speak(command)}
+                  onClick={() => {
+                    if (onVoiceCommand) onVoiceCommand(command);
+                    processVoiceCommand(command);
+                    setTranscript(command);
+                  }}
                 >
                   <div className="flex items-center gap-2">
                     <PlayCircle className="h-3 w-3 text-muted-foreground" />
@@ -391,18 +361,6 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
               ))}
             </div>
           </div>
-
-          {/* Speaking Status */}
-          {isSpeaking && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg"
-            >
-              <Volume2 className="h-4 w-4 text-blue-500" />
-              <span className="text-sm text-blue-700">{t.speaking}</span>
-            </motion.div>
-          )}
         </CardContent>
       </Card>
     </div>
