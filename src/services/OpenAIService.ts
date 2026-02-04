@@ -4,9 +4,6 @@
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
-// Debug: Log if API key is configured (first 10 chars only for security)
-console.log('OpenAI API Key loaded:', OPENAI_API_KEY ? `${OPENAI_API_KEY.substring(0, 10)}...` : 'NOT SET');
-
 export interface ChatMessage {
     role: 'system' | 'user' | 'assistant';
     content: string;
