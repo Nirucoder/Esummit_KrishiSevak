@@ -1,0 +1,9 @@
+flask
+flask-cors
+pyttsx3
+SpeechRecognition
+pyaudio
+sounddevice
+scipy
+numpy
+pywin32; sys_platform == 'win32'

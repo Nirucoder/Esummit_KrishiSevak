@@ -34,7 +34,7 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
   const [errorMessage, setErrorMessage] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const SERVER_URL = 'http://localhost:5000';
+  const SERVER_URL = import.meta.env.VITE_VOICE_API_URL || 'http://localhost:5000';
 
   useEffect(() => {
     checkServerConnection();
