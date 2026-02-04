@@ -8,13 +8,16 @@ import {
   Volume2,
   VolumeX,
   PlayCircle,
-  Settings,
   Languages,
   X,
-  RefreshCw,
-  Server
+  AlertCircle
 } from 'lucide-react';
-import { motion } from 'motion/react';
+
+// Browser Speech Recognition Types
+interface IWindow extends Window {
+  webkitSpeechRecognition: any;
+  SpeechRecognition: any;
+}
 
 interface VoiceSupportProps {
   language: string;
@@ -26,39 +29,78 @@ interface VoiceSupportProps {
 export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: VoiceSupportProps) {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isServerConnected, setIsServerConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
+  const [startError, setStartError] = useState('');
   const [transcript, setTranscript] = useState('');
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [inputText, setInputText] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
+  const [isSupported, setIsSupported] = useState(true);
+
   const inputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
+  const synthesisRef = useRef<SpeechSynthesis>(window.speechSynthesis);
 
-  const SERVER_URL = import.meta.env.VITE_VOICE_API_URL || 'http://localhost:5000';
-
+  // Initialize Speech Recognition on mount
   useEffect(() => {
-    checkServerConnection();
-  }, []);
+    if (isEnabled) {
+      const { webkitSpeechRecognition, SpeechRecognition } = window as unknown as IWindow;
+      const SpeechRecognitionConstructor = SpeechRecognition || webkitSpeechRecognition;
 
-  const checkServerConnection = async () => {
-    setIsConnecting(true);
-    try {
-      const response = await fetch(`${SERVER_URL}/status`);
-      const data = await response.json();
-      if (data.status === 'online') {
-        setIsServerConnected(true);
-        setErrorMessage('');
+      if (SpeechRecognitionConstructor) {
+        console.log('VoiceSupport: Initializing for', language);
+        const recognition = new SpeechRecognitionConstructor();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = language.startsWith('hi') ? 'hi-IN' : 'en-US';
+
+        recognition.onstart = () => {
+          setIsListening(true);
+          setStartError('');
+        };
+
+        recognition.onend = () => {
+          setIsListening(false);
+        };
+
+        recognition.onresult = (event: any) => {
+          const last = event.results.length - 1;
+          const text = event.results[last][0].transcript;
+          console.log('Voice recognized:', text);
+          setTranscript(text);
+          if (onVoiceCommand) {
+            onVoiceCommand(text);
+          }
+          processVoiceCommand(text);
+        };
+
+        recognition.onerror = (event: any) => {
+          console.error("Speech Recognition Error", event.error);
+          setIsListening(false);
+          if (event.error === 'not-allowed') {
+            setStartError('Microphone permission denied');
+          } else if (event.error === 'no-speech') {
+            setStartError('No speech detected');
+          } else if (event.error === 'network') {
+            setStartError(language.startsWith('hi') ? 'इंटरनेट कनेक्शन जांचें' : 'Internet required for voice');
+          } else {
+            setStartError('Error: ' + event.error);
+          }
+        };
+
+        recognitionRef.current = recognition;
+        setIsSupported(true);
       } else {
-        setIsServerConnected(false);
-        setErrorMessage('Voice server returned invalid status');
+        setIsSupported(false);
+        setStartError('Browser not supported');
       }
-    } catch (error) {
-      setIsServerConnected(false);
-      setErrorMessage('Plugin disconnected. Run backend/voice_server.py');
-    } finally {
-      setIsConnecting(false);
     }
-  };
+  }, [isEnabled, language, onVoiceCommand]);
+
+  // Handle language changes dynamically
+  useEffect(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.lang = language.startsWith('hi') ? 'hi-IN' : 'en-US';
+    }
+  }, [language]);
 
   const handleManualSubmit = () => {
     if (!inputText.trim()) return;
@@ -72,7 +114,7 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
 
   const content = {
     en: {
-      title: 'Voice Assistant (Python)',
+      title: 'Voice Assistant',
       listening: 'Listening...',
       notListening: 'Ready',
       speaking: 'Speaking...',
@@ -88,12 +130,13 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
       stopListening: 'Stop Listening',
       enableVoice: 'Enable Voice Output',
       disableVoice: 'Disable Voice Output',
-      notSupported: 'Backend disconnected',
+      notSupported: 'Browser not supported',
       lastCommand: 'Last Command',
-      retryConnection: 'Retry Connection'
+      retry: 'Retry',
+      error: 'Error'
     },
     hi: {
-      title: 'आवाज सहायक (Python)',
+      title: 'आवाज सहायक',
       listening: 'सुन रहा है...',
       notListening: 'तैयार',
       speaking: 'बोल रहा है...',
@@ -109,96 +152,83 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
       stopListening: 'सुनना बंद करें',
       enableVoice: 'आवाज आउटपुट सक्षम करें',
       disableVoice: 'आवाज आउटपुट अक्षम करें',
-      notSupported: 'बैकएंड डिस्कनेक्ट हो गया',
+      notSupported: 'ब्राउज़र समर्थित नहीं',
       lastCommand: 'अंतिम कमांड',
-      retryConnection: 'कनेक्शन पुनः प्रयास करें'
+      retry: 'पुनः प्रयास',
+      error: 'त्रुटि'
     }
   };
 
-  const t = content[language as keyof typeof content] || content.en;
+  const t = content[language.startsWith('hi') ? 'hi' : 'en'];
 
   const processVoiceCommand = (command: string) => {
+    console.log('Processing Command:', command);
     const lowerCommand = command.toLowerCase();
+    const isHindi = language.startsWith('hi');
 
-    // Navigation commands
     if (lowerCommand.includes('dashboard') || lowerCommand.includes('home')) {
-      speak(language === 'hi' ? 'डैशबोर्ड पर जा रहे हैं' : 'Navigating to dashboard');
+      speak(isHindi ? 'डैशबोर्ड पर जा रहे हैं' : 'Navigating to dashboard');
     } else if (lowerCommand.includes('crop') || lowerCommand.includes('फसल')) {
-      speak(language === 'hi' ? 'फसल निगरानी पर जा रहे हैं' : 'Opening crop monitoring');
+      speak(isHindi ? 'फसल निगरानी पर जा रहे हैं' : 'Opening crop monitoring');
     } else if (lowerCommand.includes('soil') || lowerCommand.includes('मिट्टी')) {
-      speak(language === 'hi' ? 'मिट्टी स्वास्थ्य विश्लेषण पर जा रहे हैं' : 'Opening soil health analysis');
+      speak(isHindi ? 'मिट्टी स्वास्थ्य विश्लेषण पर जा रहे हैं' : 'Opening soil health analysis');
     } else if (lowerCommand.includes('weather') || lowerCommand.includes('मौसम')) {
-      speak(language === 'hi' ? 'मौसम की जानकारी प्रदान कर रहे हैं' : 'Providing weather information');
+      speak(isHindi ? 'मौसम की जानकारी प्रदान कर रहे हैं' : 'Providing weather information');
     } else if (lowerCommand.includes('recommendation') || lowerCommand.includes('सुझाव')) {
-      speak(language === 'hi' ? 'सिफारिशें दिखा रहे हैं' : 'Showing recommendations');
+      speak(isHindi ? 'सिफारिशें दिखा रहे हैं' : 'Showing recommendations');
     } else {
-      speak(language === 'hi' ? 'समझ नहीं आया, कृपया फिर से कोशिश करें' : 'Command not understood, please try again');
+      speak(isHindi ? 'समझ नहीं आया, कृपया फिर से कोशिश करें' : 'Command not understood, please try again');
     }
   };
 
-  const speak = async (text: string) => {
-    if (!voiceEnabled || !isServerConnected) return;
+  const speak = (text: string) => {
+    if (!voiceEnabled || !synthesisRef.current) return;
 
-    setIsSpeaking(true);
-    try {
-      await fetch(`${SERVER_URL}/speak`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
-    } catch (error) {
-      console.error("Speech synthesis error", error);
-    } finally {
-      // Create a fake timeout to reset speaking state since status sync is complex
-      setTimeout(() => setIsSpeaking(false), 3000);
+    synthesisRef.current.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = language.startsWith('hi') ? 'hi-IN' : 'en-US';
+    utterance.rate = 1;
+    utterance.pitch = 1;
+
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+
+    const voices = synthesisRef.current.getVoices();
+    const preferredVoice = voices.find(v =>
+      v.lang.includes(utterance.lang) && (v.name.includes('Google') || v.name.includes('Neural'))
+    );
+
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
     }
+
+    synthesisRef.current.speak(utterance);
   };
 
-  const startListening = async () => {
-    if (!isServerConnected) {
-      checkServerConnection();
-      return;
-    }
-
-    setIsListening(true);
-    setErrorMessage('');
-
-    try {
-      const response = await fetch(`${SERVER_URL}/listen`, {
-        method: 'POST',
-      });
-
-      const data = await response.json();
-
-      if (data.success && data.text) {
-        setTranscript(data.text);
-        if (onVoiceCommand) {
-          onVoiceCommand(data.text);
-        }
-        processVoiceCommand(data.text);
-      } else if (!data.success) {
-        if (data.error.includes('timeout')) {
-          setErrorMessage('Listening timed out.');
-        } else {
-          setErrorMessage(data.error || 'Failed to understand');
-        }
+  const startListening = () => {
+    if (recognitionRef.current && !isListening) {
+      try {
+        recognitionRef.current.start();
+        setStartError('');
+      } catch (e) {
+        console.error("Start error", e);
       }
-    } catch (error) {
-      console.error('Listening error:', error);
-      setErrorMessage('Connection to voice server lost');
-      setIsServerConnected(false);
-    } finally {
-      setIsListening(false);
     }
   };
 
   const stopListening = () => {
-    // Current server implementation waits for timeout, 
-    // real cancellation would require a separate endpoint
-    setIsListening(false);
+    if (recognitionRef.current && isListening) {
+      recognitionRef.current.stop();
+    }
   };
 
   const toggleVoice = () => {
+    if (voiceEnabled) {
+      synthesisRef.current.cancel();
+      setIsSpeaking(false);
+    }
     setVoiceEnabled(!voiceEnabled);
   };
 
@@ -210,12 +240,12 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Mic className={`h-5 w-5 ${isServerConnected ? 'text-green-500' : 'text-gray-400'}`} />
+              <Mic className={`h-5 w-5 ${isListening ? 'text-green-500 animate-pulse' : 'text-gray-400'}`} />
               {t.title}
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={isServerConnected ? (isListening ? "default" : "outline") : "destructive"}>
-                {isServerConnected ? (isListening ? t.listening : t.notListening) : 'Offline'}
+              <Badge variant={isListening ? "default" : "outline"}>
+                {isListening ? t.listening : (startError ? t.error : t.notListening)}
               </Badge>
               <Button
                 variant="ghost"
@@ -230,44 +260,24 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
         </CardHeader>
         <CardContent className="space-y-6">
 
-          {/* Connection Status */}
-          {!isServerConnected && (
-            <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm flex flex-col gap-2">
-              <div className="flex items-center gap-2 text-red-700 font-medium">
-                <Server className="h-4 w-4" />
-                <span>Backend Disconnected</span>
-              </div>
-              <p className="text-xs text-red-600">
-                Please run the Python voice server:
-              </p>
-              <code className="bg-black/10 p-1 rounded text-xs block mb-1">
-                python backend/voice_server.py
-              </code>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={checkServerConnection}
-                disabled={isConnecting}
-                className="w-full gap-2 border-red-300 text-red-700 hover:bg-red-100"
-              >
-                {isConnecting ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                {t.retryConnection}
-              </Button>
+          {!isSupported && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm flex items-center gap-2 text-red-700">
+              <AlertCircle className="h-4 w-4" />
+              <span>{t.notSupported}. Try Chrome/Edge.</span>
             </div>
           )}
 
-          {/* Voice Controls */}
           <div className="flex flex-wrap gap-3">
             <Button
               variant={isListening ? "destructive" : "default"}
               onClick={isListening ? stopListening : startListening}
               className="flex-1 min-w-[120px]"
-              disabled={!isServerConnected || isListening}
+              disabled={!isSupported}
             >
               {isListening ? (
                 <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Processing...
+                  <MicOff className="h-4 w-4 mr-2" />
+                  {t.stopListening}
                 </>
               ) : (
                 <>
@@ -296,14 +306,12 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
             </Button>
           </div>
 
-          {/* Error Message */}
-          {errorMessage && (
+          {startError && (
             <div className="text-xs text-red-500 bg-red-50 p-2 rounded border border-red-200">
-              {errorMessage}
+              {startError}
             </div>
           )}
 
-          {/* Text Input Fallback */}
           <div className="flex gap-2">
             <input
               ref={inputRef}
@@ -311,7 +319,7 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
-              placeholder={language === 'hi' ? "कमांड टाइप करें..." : "Type a command..."}
+              placeholder={language.startsWith('hi') ? "कमांड टाइप करें..." : "Type a command..."}
               className="flex-1 text-sm border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
             />
             <Button size="sm" onClick={handleManualSubmit} disabled={!inputText.trim()}>
@@ -319,7 +327,6 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
             </Button>
           </div>
 
-          {/* Last Command */}
           {transcript && (
             <div className="p-3 bg-accent rounded-lg">
               <div className="flex items-start gap-2">
@@ -336,7 +343,6 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
             </div>
           )}
 
-          {/* Sample Commands */}
           <div>
             <h4 className="font-medium mb-3 flex items-center gap-2">
               <Languages className="h-4 w-4" />
