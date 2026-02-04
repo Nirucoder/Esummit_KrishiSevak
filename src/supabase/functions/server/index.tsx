@@ -38,7 +38,7 @@ app.get("/make-server-cc69ee2d/health", (c) => {
 app.post("/make-server-cc69ee2d/auth/signup", async (c) => {
   try {
     const { email, password, name, phone } = await c.req.json();
-    
+
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
@@ -64,18 +64,18 @@ app.post("/make-server-cc69ee2d/auth/signup", async (c) => {
 app.post("/make-server-cc69ee2d/ml/predict/crop-suitability", async (c) => {
   try {
     const { location, soilData, weatherData, farmSize } = await c.req.json();
-    
+
     // For now, we'll generate enhanced predictions based on input data
     // In production, this would call your actual ML models
     const predictions = generateCropSuitabilityPredictions(location, soilData, weatherData, farmSize);
-    
+
     // Store prediction in database for historical tracking
     await kv.set(`crop_prediction_${Date.now()}`, {
       location,
       predictions,
       timestamp: new Date().toISOString()
     });
-    
+
     return c.json(predictions);
   } catch (error) {
     console.log("Crop suitability prediction error:", error);
@@ -87,9 +87,9 @@ app.post("/make-server-cc69ee2d/ml/predict/crop-suitability", async (c) => {
 app.post("/make-server-cc69ee2d/ml/predict/yield-forecast", async (c) => {
   try {
     const { crop, location, plantingDate, farmingPractices } = await c.req.json();
-    
+
     const forecast = generateYieldForecast(crop, location, plantingDate, farmingPractices);
-    
+
     // Store forecast for tracking accuracy
     await kv.set(`yield_forecast_${Date.now()}`, {
       crop,
@@ -97,7 +97,7 @@ app.post("/make-server-cc69ee2d/ml/predict/yield-forecast", async (c) => {
       forecast,
       timestamp: new Date().toISOString()
     });
-    
+
     return c.json(forecast);
   } catch (error) {
     console.log("Yield forecast error:", error);
@@ -109,16 +109,16 @@ app.post("/make-server-cc69ee2d/ml/predict/yield-forecast", async (c) => {
 app.post("/make-server-cc69ee2d/ml/predict/crop-health", async (c) => {
   try {
     const { images, crop, location } = await c.req.json();
-    
+
     const healthPrediction = generateCropHealthPrediction(crop, location, images);
-    
+
     await kv.set(`health_prediction_${Date.now()}`, {
       crop,
       location,
       healthPrediction,
       timestamp: new Date().toISOString()
     });
-    
+
     return c.json(healthPrediction);
   } catch (error) {
     console.log("Crop health prediction error:", error);
@@ -130,15 +130,15 @@ app.post("/make-server-cc69ee2d/ml/predict/crop-health", async (c) => {
 app.post("/make-server-cc69ee2d/ml/predict/soil-analysis", async (c) => {
   try {
     const { soilImage, location, testResults } = await c.req.json();
-    
+
     const soilAnalysis = generateSoilAnalysis(location, testResults);
-    
+
     await kv.set(`soil_analysis_${Date.now()}`, {
       location,
       soilAnalysis,
       timestamp: new Date().toISOString()
     });
-    
+
     return c.json(soilAnalysis);
   } catch (error) {
     console.log("Soil analysis error:", error);
@@ -150,16 +150,16 @@ app.post("/make-server-cc69ee2d/ml/predict/soil-analysis", async (c) => {
 app.post("/make-server-cc69ee2d/ml/predict/weather-impact", async (c) => {
   try {
     const { location, crop, plantingDate } = await c.req.json();
-    
+
     const weatherImpact = generateWeatherImpactPrediction(location, crop, plantingDate);
-    
+
     await kv.set(`weather_impact_${Date.now()}`, {
       location,
       crop,
       weatherImpact,
       timestamp: new Date().toISOString()
     });
-    
+
     return c.json(weatherImpact);
   } catch (error) {
     console.log("Weather impact prediction error:", error);
@@ -173,15 +173,15 @@ app.post("/make-server-cc69ee2d/ml/predict/weather-impact", async (c) => {
 app.post("/make-server-cc69ee2d/gee/satellite-analysis", async (c) => {
   try {
     const { location, startDate, endDate, analysisType } = await c.req.json();
-    
+
     const analysis = generateSatelliteAnalysis(location, startDate, endDate, analysisType);
-    
+
     await kv.set(`satellite_analysis_${Date.now()}`, {
       location,
       analysis,
       timestamp: new Date().toISOString()
     });
-    
+
     return c.json(analysis);
   } catch (error) {
     console.log("Satellite analysis error:", error);
@@ -193,9 +193,9 @@ app.post("/make-server-cc69ee2d/gee/satellite-analysis", async (c) => {
 app.post("/make-server-cc69ee2d/gee/calculate-ndvi", async (c) => {
   try {
     const { location, date } = await c.req.json();
-    
+
     const ndviData = generateNDVIData(location, date);
-    
+
     return c.json(ndviData);
   } catch (error) {
     console.log("NDVI calculation error:", error);
@@ -207,9 +207,9 @@ app.post("/make-server-cc69ee2d/gee/calculate-ndvi", async (c) => {
 app.post("/make-server-cc69ee2d/gee/soil-moisture", async (c) => {
   try {
     const { location, radius, date } = await c.req.json();
-    
+
     const soilMoistureData = generateSoilMoistureData(location, radius, date);
-    
+
     return c.json(soilMoistureData);
   } catch (error) {
     console.log("Soil moisture analysis error:", error);
@@ -224,9 +224,9 @@ app.get("/make-server-cc69ee2d/data/historical-yields", async (c) => {
   try {
     const location = c.req.query("location");
     const crop = c.req.query("crop");
-    
+
     const yields = await getHistoricalYields(location, crop);
-    
+
     return c.json(yields);
   } catch (error) {
     console.log("Historical yields error:", error);
@@ -238,12 +238,12 @@ app.get("/make-server-cc69ee2d/data/historical-yields", async (c) => {
 app.post("/make-server-cc69ee2d/user/save-data", async (c) => {
   try {
     const userData = await c.req.json();
-    
+
     await kv.set(`user_data_${userData.userId}`, {
       ...userData,
       timestamp: new Date().toISOString()
     });
-    
+
     return c.json({ success: true });
   } catch (error) {
     console.log("Save user data error:", error);
@@ -256,7 +256,7 @@ app.get("/make-server-cc69ee2d/user/data/:userId", async (c) => {
   try {
     const userId = c.req.param("userId");
     const userData = await kv.get(`user_data_${userId}`);
-    
+
     return c.json(userData || {});
   } catch (error) {
     console.log("Get user data error:", error);
@@ -269,7 +269,7 @@ app.get("/make-server-cc69ee2d/user/crop-cycles/:userId", async (c) => {
   try {
     const userId = c.req.param("userId");
     const cropCycles = await kv.getByPrefix(`crop_cycle_${userId}_`);
-    
+
     return c.json({ cropCycles: cropCycles || [] });
   } catch (error) {
     console.log("Get crop cycles error:", error);
@@ -282,14 +282,14 @@ app.get("/make-server-cc69ee2d/user/alerts/:userId", async (c) => {
   try {
     const userId = c.req.param("userId");
     const unreadOnly = c.req.query("unreadOnly") === "true";
-    
+
     const alerts = await kv.getByPrefix(`alert_${userId}_`);
     let filteredAlerts = alerts || [];
-    
+
     if (unreadOnly) {
       filteredAlerts = filteredAlerts.filter((alert: any) => !alert.isRead);
     }
-    
+
     return c.json({ alerts: filteredAlerts });
   } catch (error) {
     console.log("Get alerts error:", error);
@@ -301,14 +301,14 @@ app.get("/make-server-cc69ee2d/user/alerts/:userId", async (c) => {
 app.post("/make-server-cc69ee2d/analytics/yield-analysis", async (c) => {
   try {
     const { userId, crop } = await c.req.json();
-    
+
     // Get historical yield data for the user and crop
     const historicalData = await kv.getByPrefix(`historical_yield_${userId}_`);
     const cropData = historicalData.filter((data: any) => data.crop === crop);
-    
+
     // Calculate analytics
     const analytics = calculateYieldAnalytics(cropData);
-    
+
     return c.json(analytics);
   } catch (error) {
     console.log("Yield analytics error:", error);
@@ -320,13 +320,13 @@ app.post("/make-server-cc69ee2d/analytics/yield-analysis", async (c) => {
 app.post("/make-server-cc69ee2d/export/user-data", async (c) => {
   try {
     const { userId, format } = await c.req.json();
-    
+
     // Collect all user data
     const userData = await kv.get(`user_data_${userId}`);
     const cropCycles = await kv.getByPrefix(`crop_cycle_${userId}_`);
     const historicalYields = await kv.getByPrefix(`historical_yield_${userId}_`);
     const alerts = await kv.getByPrefix(`alert_${userId}_`);
-    
+
     const exportData = {
       profile: userData,
       cropCycles,
@@ -334,10 +334,10 @@ app.post("/make-server-cc69ee2d/export/user-data", async (c) => {
       alerts,
       exportDate: new Date().toISOString()
     };
-    
+
     // Generate export file
     const exportResult = await generateExportFile(exportData, format);
-    
+
     return c.json(exportResult);
   } catch (error) {
     console.log("Data export error:", error);
@@ -349,11 +349,11 @@ app.post("/make-server-cc69ee2d/export/user-data", async (c) => {
 app.post("/make-server-cc69ee2d/alerts/whatsapp", async (c) => {
   try {
     const { userId, message, phoneNumber } = await c.req.json();
-    
+
     // For demo purposes, we'll just log the alert
     // In production, this would integrate with WhatsApp Business API
     console.log(`WhatsApp Alert for ${phoneNumber}: ${message}`);
-    
+
     // Store alert in database
     await kv.set(`whatsapp_alert_${Date.now()}`, {
       userId,
@@ -362,7 +362,7 @@ app.post("/make-server-cc69ee2d/alerts/whatsapp", async (c) => {
       timestamp: new Date().toISOString(),
       status: 'sent'
     });
-    
+
     return c.json({ success: true, status: 'sent' });
   } catch (error) {
     console.log("WhatsApp alert error:", error);
@@ -375,9 +375,9 @@ app.get("/make-server-cc69ee2d/government-schemes", async (c) => {
   try {
     const location = c.req.query("location");
     const crop = c.req.query("crop");
-    
+
     const schemes = getGovernmentSchemes(location, crop);
-    
+
     return c.json(schemes);
   } catch (error) {
     console.log("Government schemes error:", error);
@@ -391,7 +391,7 @@ app.get("/make-server-cc69ee2d/government-schemes", async (c) => {
 app.post("/make-server-cc69ee2d/ml/upload-training-data", async (c) => {
   try {
     const { data } = await c.req.json();
-    
+
     // Store training data
     const dataIds = [];
     for (const item of data) {
@@ -403,7 +403,7 @@ app.post("/make-server-cc69ee2d/ml/upload-training-data", async (c) => {
       });
       dataIds.push(dataId);
     }
-    
+
     return c.json({ success: true, dataIds });
   } catch (error) {
     console.log("Upload training data error:", error);
@@ -415,9 +415,9 @@ app.post("/make-server-cc69ee2d/ml/upload-training-data", async (c) => {
 app.post("/make-server-cc69ee2d/ml/start-training", async (c) => {
   try {
     const config = await c.req.json();
-    
+
     const trainingId = `training_${Date.now()}`;
-    
+
     // Store training configuration
     await kv.set(`training_config_${trainingId}`, {
       ...config,
@@ -426,7 +426,7 @@ app.post("/make-server-cc69ee2d/ml/start-training", async (c) => {
       startedAt: new Date().toISOString(),
       progress: 0
     });
-    
+
     return c.json({ trainingId, success: true });
   } catch (error) {
     console.log("Start training error:", error);
@@ -438,11 +438,11 @@ app.post("/make-server-cc69ee2d/ml/start-training", async (c) => {
 app.get("/make-server-cc69ee2d/ml/training-progress/:trainingId", async (c) => {
   try {
     const trainingId = c.req.param("trainingId");
-    
+
     // Simulate training progress
     const progress = Math.min(100, Math.floor(Math.random() * 100));
     const status = progress >= 100 ? 'completed' : 'training';
-    
+
     const trainingProgress = {
       status,
       progress,
@@ -459,7 +459,7 @@ app.get("/make-server-cc69ee2d/ml/training-progress/:trainingId", async (c) => {
         `Validation accuracy: ${(0.65 + Math.random() * 0.25).toFixed(4)}`
       ]
     };
-    
+
     return c.json(trainingProgress);
   } catch (error) {
     console.log("Training progress error:", error);
@@ -471,7 +471,7 @@ app.get("/make-server-cc69ee2d/ml/training-progress/:trainingId", async (c) => {
 app.get("/make-server-cc69ee2d/ml/models/:modelId", async (c) => {
   try {
     const modelId = c.req.param("modelId");
-    
+
     const trainedModel = {
       id: modelId,
       farmerId: 'farmer-1',
@@ -501,7 +501,7 @@ app.get("/make-server-cc69ee2d/ml/models/:modelId", async (c) => {
         lastUpdated: new Date().toISOString()
       }
     };
-    
+
     return c.json(trainedModel);
   } catch (error) {
     console.log("Get trained model error:", error);
@@ -513,7 +513,7 @@ app.get("/make-server-cc69ee2d/ml/models/:modelId", async (c) => {
 app.get("/make-server-cc69ee2d/ml/farmers/:farmerId/models", async (c) => {
   try {
     const farmerId = c.req.param("farmerId");
-    
+
     const farmerModels = [
       {
         id: 'model-1',
@@ -558,7 +558,7 @@ app.get("/make-server-cc69ee2d/ml/farmers/:farmerId/models", async (c) => {
         deploymentStatus: 'pending'
       }
     ];
-    
+
     return c.json(farmerModels);
   } catch (error) {
     console.log("List farmer models error:", error);
@@ -570,10 +570,10 @@ app.get("/make-server-cc69ee2d/ml/farmers/:farmerId/models", async (c) => {
 app.post("/make-server-cc69ee2d/ml/models/:modelId/deploy", async (c) => {
   try {
     const modelId = c.req.param("modelId");
-    
+
     return c.json({
       success: true,
-      endpoint: `https://jtoioakoasnckzqirpqz.supabase.co/functions/v1/make-server-cc69ee2d/ml/models/${modelId}/predict`
+      endpoint: `${Deno.env.get("SUPABASE_URL")}/functions/v1/make-server-cc69ee2d/ml/models/${modelId}/predict`
     });
   } catch (error) {
     console.log("Deploy model error:", error);
@@ -586,7 +586,7 @@ app.post("/make-server-cc69ee2d/ml/models/:modelId/predict", async (c) => {
   try {
     const modelId = c.req.param("modelId");
     const { input } = await c.req.json();
-    
+
     const prediction = {
       prediction: 4.2,
       confidence: 0.87,
@@ -597,7 +597,7 @@ app.post("/make-server-cc69ee2d/ml/models/:modelId/predict", async (c) => {
       },
       explanation: 'High NDVI and optimal moisture levels indicate strong yield potential'
     };
-    
+
     return c.json(prediction);
   } catch (error) {
     console.log("Model prediction error:", error);
@@ -622,9 +622,9 @@ app.get("/make-server-cc69ee2d/gee/script-templates", async (c) => {
 app.post("/make-server-cc69ee2d/gee/execute", async (c) => {
   try {
     const { scriptId, parameters } = await c.req.json();
-    
+
     const taskId = `task_${Date.now()}`;
-    
+
     // Store execution task
     await kv.set(`gee_task_${taskId}`, {
       taskId,
@@ -634,7 +634,7 @@ app.post("/make-server-cc69ee2d/gee/execute", async (c) => {
       startedAt: new Date().toISOString(),
       progress: 0
     });
-    
+
     return c.json({ taskId, success: true });
   } catch (error) {
     console.log("Execute script error:", error);
@@ -646,11 +646,11 @@ app.post("/make-server-cc69ee2d/gee/execute", async (c) => {
 app.get("/make-server-cc69ee2d/gee/tasks/:taskId", async (c) => {
   try {
     const taskId = c.req.param("taskId");
-    
+
     // Simulate execution progress
     const progress = Math.min(100, Math.floor(Math.random() * 100));
     const status = progress >= 100 ? 'COMPLETED' : 'RUNNING';
-    
+
     const executionResult = {
       taskId,
       status,
@@ -684,7 +684,7 @@ app.get("/make-server-cc69ee2d/gee/tasks/:taskId", async (c) => {
         storageMb: Math.floor(Math.random() * 500)
       }
     };
-    
+
     return c.json(executionResult);
   } catch (error) {
     console.log("Get execution status error:", error);
@@ -697,7 +697,7 @@ app.get("/make-server-cc69ee2d/gee/tasks/:taskId", async (c) => {
 function generateCropSuitabilityPredictions(location: any, soilData: any, weatherData: any, farmSize: number) {
   // Enhanced mock data that varies based on location and conditions
   const baseConfidence = 0.7 + Math.random() * 0.25;
-  
+
   return [
     {
       crop: 'Rice',
@@ -735,7 +735,7 @@ function generateCropSuitabilityPredictions(location: any, soilData: any, weathe
 function generateYieldForecast(crop: string, location: any, plantingDate: string, farmingPractices: any) {
   const baseYield = 3.5 + Math.random() * 1.5;
   const practiceMultiplier = farmingPractices?.organic ? 0.9 : 1.0;
-  
+
   return {
     crop,
     currentYield: baseYield * practiceMultiplier,
@@ -753,7 +753,7 @@ function generateYieldForecast(crop: string, location: any, plantingDate: string
 
 function generateCropHealthPrediction(crop: string, location: any, images: string[]) {
   const healthScore = 75 + Math.random() * 20;
-  
+
   return {
     healthScore: Math.round(healthScore),
     diseases: generateDiseasesPrediction(crop, healthScore),
@@ -810,10 +810,10 @@ function generateSatelliteAnalysis(location: any, startDate: string, endDate: st
 function generateNDVIData(location: any, date: string) {
   const baseNDVI = 0.3 + Math.random() * 0.4;
   const healthPercentage = Math.round(baseNDVI * 100);
-  const vegetationHealth = baseNDVI > 0.7 ? 'Excellent' : 
-                          baseNDVI > 0.6 ? 'Good' : 
-                          baseNDVI > 0.4 ? 'Fair' : 'Poor';
-  
+  const vegetationHealth = baseNDVI > 0.7 ? 'Excellent' :
+    baseNDVI > 0.6 ? 'Good' :
+      baseNDVI > 0.4 ? 'Fair' : 'Poor';
+
   return {
     averageNDVI: parseFloat(baseNDVI.toFixed(3)),
     maxNDVI: parseFloat((baseNDVI + 0.1).toFixed(3)),
@@ -838,7 +838,7 @@ function generateNDVIData(location: any, date: string) {
 async function getHistoricalYields(location: string, crop: string) {
   try {
     const historicalData = await kv.getByPrefix('yield_forecast_');
-    
+
     // Generate additional historical data for demonstration
     const years = [2019, 2020, 2021, 2022, 2023];
     const yields = years.map(year => ({
@@ -847,7 +847,7 @@ async function getHistoricalYields(location: string, crop: string) {
       rainfall: 800 + Math.random() * 400,
       temperature: 25 + Math.random() * 10
     }));
-    
+
     return {
       location,
       crop,
@@ -955,7 +955,7 @@ function getSeasonalDate(crop: string, type: 'start' | 'end'): string {
 function generateIrrigationSchedule(crop: string, plantingDate: string) {
   const planting = new Date(plantingDate);
   const schedule = [];
-  
+
   for (let i = 1; i <= 4; i++) {
     const date = new Date(planting);
     date.setDate(date.getDate() + (i * 20));
@@ -965,7 +965,7 @@ function generateIrrigationSchedule(crop: string, plantingDate: string) {
       reason: `Growth stage ${i} irrigation`
     });
   }
-  
+
   return schedule;
 }
 
@@ -973,10 +973,10 @@ function generateNDVITrend(startDate: string, endDate: string) {
   const start = new Date(startDate);
   const end = new Date(endDate);
   const trend = [];
-  
+
   const daysDiff = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
   const intervals = Math.min(10, Math.max(5, Math.floor(daysDiff / 7)));
-  
+
   for (let i = 0; i < intervals; i++) {
     const date = new Date(start);
     date.setDate(date.getDate() + (i * Math.floor(daysDiff / intervals)));
@@ -985,7 +985,7 @@ function generateNDVITrend(startDate: string, endDate: string) {
       ndvi: 0.3 + Math.random() * 0.4
     });
   }
-  
+
   return trend;
 }
 
@@ -1019,7 +1019,7 @@ function generateNDVIRecommendations(ndvi: number): string[] {
 
 function generateSoilMoistureData(location: any, radius: number, date: string) {
   const baseMoisture = 30 + Math.random() * 40; // 30-70% moisture
-  
+
   return {
     averageMoisture: Math.round(baseMoisture),
     moistureMap: [
@@ -1055,14 +1055,14 @@ function calculateYieldAnalytics(cropData: any[]) {
 
   const yields = cropData.map(d => d.yield);
   const profits = cropData.map(d => d.profit);
-  
+
   const averageYield = yields.reduce((sum, y) => sum + y, 0) / yields.length;
   const averageProfit = profits.reduce((sum, p) => sum + p, 0) / profits.length;
-  
+
   const bestYield = Math.max(...yields);
   const worstYield = Math.min(...yields);
   const bestProfit = Math.max(...profits);
-  
+
   const bestYearData = cropData.find(d => d.yield === bestYield);
   const worstYearData = cropData.find(d => d.yield === worstYield);
   const bestProfitData = cropData.find(d => d.profit === bestProfit);
@@ -1072,7 +1072,7 @@ function calculateYieldAnalytics(cropData: any[]) {
   const secondHalf = yields.slice(Math.floor(yields.length / 2));
   const firstAvg = firstHalf.reduce((sum, y) => sum + y, 0) / firstHalf.length;
   const secondAvg = secondHalf.reduce((sum, y) => sum + y, 0) / secondHalf.length;
-  
+
   const changePercent = ((secondAvg - firstAvg) / firstAvg) * 100;
   const trend = changePercent > 5 ? 'Increasing' : changePercent < -5 ? 'Decreasing' : 'Stable';
 
@@ -1092,7 +1092,7 @@ function calculateYieldAnalytics(cropData: any[]) {
 
 function generateAnalyticsRecommendations(trend: string, changePercent: number, averageYield: number): string[] {
   const recommendations = [];
-  
+
   if (trend === 'Increasing') {
     recommendations.push('Excellent progress! Continue current farming practices');
     recommendations.push('Consider expanding cultivated area');
@@ -1104,24 +1104,24 @@ function generateAnalyticsRecommendations(trend: string, changePercent: number, 
     recommendations.push('Stable yields - good consistency');
     recommendations.push('Explore yield enhancement techniques');
   }
-  
+
   if (averageYield < 3.0) {
     recommendations.push('Below average yield - consider improved varieties');
     recommendations.push('Focus on soil health improvement');
   }
-  
+
   return recommendations;
 }
 
 async function generateExportFile(data: any, format: string) {
   // For demo purposes, we'll create a simple export
   // In production, this would generate actual Excel/CSV files
-  
+
   const filename = `krishisevak_export_${Date.now()}.${format}`;
-  const exportContent = format === 'json' ? JSON.stringify(data, null, 2) : 
-                       format === 'csv' ? convertToCSV(data) :
-                       'Excel export not implemented in demo';
-  
+  const exportContent = format === 'json' ? JSON.stringify(data, null, 2) :
+    format === 'csv' ? convertToCSV(data) :
+      'Excel export not implemented in demo';
+
   // In production, you would save this to Supabase Storage and return a signed URL
   return {
     downloadUrl: `data:text/plain;charset=utf-8,${encodeURIComponent(exportContent)}`,
@@ -1133,19 +1133,19 @@ async function generateExportFile(data: any, format: string) {
 function convertToCSV(data: any): string {
   // Simple CSV conversion for demo
   let csv = 'Type,Date,Data\n';
-  
+
   if (data.cropCycles) {
     data.cropCycles.forEach((cycle: any) => {
       csv += `Crop Cycle,${cycle.plantingDate},"${cycle.crop} - ${cycle.variety}"\n`;
     });
   }
-  
+
   if (data.historicalYields) {
     data.historicalYields.forEach((yieldData: any) => {
       csv += `Historical Yield,${yieldData.year},"${yieldData.crop}: ${yieldData.yield} tons"\n`;
     });
   }
-  
+
   return csv;
 }
 

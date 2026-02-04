@@ -1,6 +1,8 @@
 // Configuration for KrishiSevak Platform
 // Manages API endpoints and configuration in browser environment
 
+import { projectId, publicAnonKey } from '../utils/supabase/info';
+
 export interface KrishiSevakConfig {
   mlModel: {
     baseUrl: string;
@@ -24,17 +26,17 @@ export interface KrishiSevakConfig {
 // Default configuration - Now connected to Supabase backend
 const defaultConfig: KrishiSevakConfig = {
   mlModel: {
-    baseUrl: `https://jtoioakoasnckzqirpqz.supabase.co/functions/v1/make-server-cc69ee2d/ml`,
-    apiKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0b2lvYWtvYXNuY2t6cWlycHF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc4Mzg1MjUsImV4cCI6MjA3MzQxNDUyNX0.s3bKKTK6YAo107FCUi3nH4P7ocXSUEUSLXisMN735BA",
+    baseUrl: `https://${projectId}.supabase.co/functions/v1/make-server-cc69ee2d/ml`,
+    apiKey: publicAnonKey,
   },
   googleEarthEngine: {
-    endpoint: `https://jtoioakoasnckzqirpqz.supabase.co/functions/v1/make-server-cc69ee2d/gee`,
-    scriptsEndpoint: `https://jtoioakoasnckzqirpqz.supabase.co/functions/v1/make-server-cc69ee2d/gee`,
-    apiKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0b2lvYWtvYXNuY2t6cWlycHF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc4Mzg1MjUsImV4cCI6MjA3MzQxNDUyNX0.s3bKKTK6YAo107FCUi3nH4P7ocXSUEUSLXisMN735BA",
+    endpoint: `https://${projectId}.supabase.co/functions/v1/make-server-cc69ee2d/gee`,
+    scriptsEndpoint: `https://${projectId}.supabase.co/functions/v1/make-server-cc69ee2d/gee`,
+    apiKey: publicAnonKey,
   },
   mlTraining: {
-    endpoint: `https://jtoioakoasnckzqirpqz.supabase.co/functions/v1/make-server-cc69ee2d/ml`,
-    apiKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0b2lvYWtvYXNuY2t6cWlycHF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc4Mzg1MjUsImV4cCI6MjA3MzQxNDUyNX0.s3bKKTK6YAo107FCUi3nH4P7ocXSUEUSLXisMN735BA",
+    endpoint: `https://${projectId}.supabase.co/functions/v1/make-server-cc69ee2d/ml`,
+    apiKey: publicAnonKey,
   },
   development: {
     useMockData: false, // Now connected to real backend
