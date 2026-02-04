@@ -115,6 +115,8 @@ export function AIAssistant({ language, isOpen, onClose }: AIAssistantProps) {
     try {
       const { openAIService } = await import('../services/OpenAIService');
 
+      console.log('OpenAI configured:', openAIService.isConfigured());
+
       if (openAIService.isConfigured()) {
         // Fetch weather context from Agromonitoring
         let weatherContext = undefined;
@@ -315,7 +317,7 @@ export function AIAssistant({ language, isOpen, onClose }: AIAssistantProps) {
       onClick={onClose}
     >
       <Card
-        className="w-full max-w-2xl h-[600px] flex flex-col"
+        className="w-full max-w-2xl h-[80vh] max-h-[700px] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
@@ -336,9 +338,9 @@ export function AIAssistant({ language, isOpen, onClose }: AIAssistantProps) {
           </Button>
         </CardHeader>
 
-        <CardContent className="flex-1 flex flex-col space-y-4">
+        <CardContent className="flex-1 flex flex-col space-y-4 min-h-0 overflow-hidden">
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto space-y-4 pr-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2 min-h-0">
             <AnimatePresence>
               {messages.map((message) => (
                 <motion.div
