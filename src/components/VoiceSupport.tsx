@@ -2,12 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { 
-  Mic, 
-  MicOff, 
-  Volume2, 
-  VolumeX, 
-  PlayCircle, 
+import {
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  PlayCircle,
   PauseCircle,
   Settings,
   Languages,
@@ -87,17 +87,26 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
   useEffect(() => {
     // Check if Speech Recognition is supported
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      console.log('🎤 Speech Recognition found in browser');
       setIsSupported(true);
       const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      
-      if (recognitionRef.current) {
-        recognitionRef.current.continuous = false;
-        recognitionRef.current.interimResults = false;
-        recognitionRef.current.lang = language === 'hi' ? 'hi-IN' : 'en-US';
 
-        recognitionRef.current.onresult = (event: any) => {
+      try {
+        const recognition = new SpeechRecognition();
+        recognitionRef.current = recognition;
+
+        recognition.continuous = false; // Stop after one command usually better for web apps
+        recognition.interimResults = false;
+        recognition.lang = language === 'hi' ? 'hi-IN' : 'en-US';
+
+        recognition.onstart = () => {
+          console.log('🎤 Recognition started');
+          setIsListening(true);
+        };
+
+        recognition.onresult = (event: any) => {
           const result = event.results[0][0].transcript;
+          console.log('🎤 Result received:', result);
           setTranscript(result);
           if (onVoiceCommand) {
             onVoiceCommand(result);
@@ -105,21 +114,36 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
           processVoiceCommand(result);
         };
 
-        recognitionRef.current.onend = () => {
+        recognition.onend = () => {
+          console.log('🎤 Recognition ended');
           setIsListening(false);
         };
 
-        recognitionRef.current.onerror = (event: any) => {
-          console.error('Speech recognition error:', event.error);
+        recognition.onerror = (event: any) => {
+          console.error('🎤 Speech recognition error:', event.error);
+          if (event.error === 'not-allowed') {
+            alert('Microphone access denied. Please allow microphone permissions in your browser settings.');
+          }
           setIsListening(false);
         };
+      } catch (e) {
+        console.error('🎤 Failed to initialize recognition:', e);
       }
+    } else {
+      console.log('🎤 Speech Recognition NOT supported');
+      setIsSupported(false);
     }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
   }, [language]);
 
   const processVoiceCommand = (command: string) => {
     const lowerCommand = command.toLowerCase();
-    
+
     // Navigation commands
     if (lowerCommand.includes('dashboard') || lowerCommand.includes('home')) {
       speak(language === 'hi' ? 'डैशबोर्ड पर जा रहे हैं' : 'Navigating to dashboard');
@@ -136,17 +160,51 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
     }
   };
 
+  useEffect(() => {
+    // Load voices when they are ready
+    const loadVoices = () => {
+      window.speechSynthesis.getVoices();
+    };
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices();
+  }, []);
+
   const speak = (text: string) => {
     if (!voiceEnabled || !('speechSynthesis' in window)) return;
-    
+
+    // Cancel any current speaking
+    speechSynthesis.cancel();
+
     setIsSpeaking(true);
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = language === 'hi' ? 'hi-IN' : 'en-US';
     utterance.rate = speechRate;
-    
+
+    // Attempt to find a better voice
+    const voices = window.speechSynthesis.getVoices();
+    let selectedVoice = null;
+
+    if (language === 'hi') {
+      selectedVoice = voices.find(v => v.lang.includes('hi') || v.name.includes('Hindi'));
+    }
+
+    if (!selectedVoice) {
+      // Fallback or English preference
+      selectedVoice = voices.find(v => v.lang.startsWith(language === 'hi' ? 'hi' : 'en'));
+    }
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    }
+
     utterance.onend = () => {
       setIsSpeaking(false);
     };
+
+    utterance.onerror = (e) => {
+      console.error("Speech synthesis error", e);
+      setIsSpeaking(false);
+    }
 
     speechSynthesis.speak(utterance);
   };
@@ -248,7 +306,7 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
                 </>
               )}
             </Button>
-            
+
             <Button
               variant={voiceEnabled ? "default" : "outline"}
               onClick={toggleVoice}
@@ -270,7 +328,7 @@ export function VoiceSupport({ language, isEnabled, onToggle, onVoiceCommand }: 
 
           {/* Voice Animation */}
           {isListening && (
-            <motion.div 
+            <motion.div
               className="flex justify-center"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
